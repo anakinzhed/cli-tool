@@ -14,7 +14,7 @@ use std::fs::OpenOptions;
 use chrono::Local;
 
 // Error handling
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 
 // Regular expresions 
 use regex::*;
@@ -81,19 +81,19 @@ async fn main() -> Result<()> {
     // Initialize Logging 
     setup_logging()?;
     
-    info!("RUST CLI TOOL HAS STARTED");
+    info!("Rust Cli Tool has started");
 
     let args = Args::parse().params;
-    //println!("{:?}", args);
+
     if args.len() != 2 {
-        error!("INVALID INPUT | EXAMPLE FORMAT: 100uosmo osmjiewjfhiewf23uiwesnec");
-        return Err(anyhow!("INVALID INPUT | EXAMPLE FORMAT: 100uosmo osmjiewjfhiewf23uiwesnec"))
+        error!("Invalid input, example format: 100uosmo osmjiewjfhiewf23uiwesnec");
+        return Err(anyhow!("Invalid input, example format: 100uosmo osmjiewjfhiewf23uiwesnec"))
     }
 
     //Define a new Transaction
     let mut transaction: Transaction = Transaction::new();
 
-    // Check input -> use log to record each operation
+    // Check input
     match validate_args(&args){
         // All good
         Ok((amount, token , addr)) => {
@@ -121,12 +121,13 @@ async fn main() -> Result<()> {
     match execute_transaction(&transaction).await{
         // Transaction completed
         Ok((code, height, txhash)) => {
-            // Json with values
+
             let transaction_details = json!({
                 "Code": code,
                 "Height": height,
                 "TxHash": txhash,
             });
+
             // All good
             if code == 0 {
                 info!("Transaction completed successfully: {}", transaction_details);
@@ -135,22 +136,38 @@ async fn main() -> Result<()> {
                 return Err(anyhow!("Transaction finalized with errors {}", transaction_details));
             }
         }
-        // Error 
         Err(e) => {
             error!("Failed to execute transaction: {}", e);
-            return Err(e.context("Failed during transaction execution"));
+            return Err(e.context("Error encountered during transaction execution"));
         }
     }
 
-    //All good
     Ok(())
-
 }
 
-// Setup Logging
+/// Sets up logging for the CLI tool by creating a log file and configuring the logger.
+///
+/// This function performs the following steps:
+/// 1. Creates a directory named `logs` if it doesn't exist.
+/// 2. Generates a log file with the format `cli-tool_YYYY-MM-DD_HH-MM-SS.log` based on the current date and time.
+/// 3. Configures the logger to output log messages to both the console and the log file.
+///
+/// The log entries include the timestamp, log level, target (source of the log), and the message.
+///
+/// ### Returns
+/// Returns `Ok(())` if the logging setup was successful, or an error if:
+/// - The logs directory cannot be created.
+/// - The log file cannot be opened or written to.
+/// - The log configuration fails to be applied.
+///
+/// ### Errors
+/// - If unable to create the `logs` directory, an error with the message `"Unable to create the logs directory"` will be returned.
+/// - If the log file cannot be opened, an error with the message `"Failed to open log file"` will be returned.
+/// - If the log configuration cannot be applied, an error with the message `"Error applying log configuration"` will be returned.
+
 fn setup_logging() -> Result<()> {
     // Create a directory named "logs" if it doesn't exist
-    std::fs::create_dir_all("logs")?;
+    std::fs::create_dir_all("logs").context("Unable to create the logs directory")?;
     
     // Log filename with the format "cli-tool_YYYY-MM-DD_HH-MM-SS.log" based on current time
     let log_filename = format!("cli-tool_{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S")); 
@@ -181,61 +198,115 @@ fn setup_logging() -> Result<()> {
             // Append new logs 
             .append(true)  
             // Open log file in the "logs" directory
-            .open(Path::new("logs").join(log_filename))?) 
+            .open(Path::new("logs").join(log_filename)).context("Failed to open log file")?) 
         // Set Log level
         .level(log::LevelFilter::Info)
         // Apply the log config
-        .apply()?; 
+        .apply().context("Error applying log configuration")?; 
     // All good
     Ok(())
 }
 
-// Validate input
+/// Validates the provided arguments for a Cosmos transaction.
+///
+/// This function validates two key arguments: 
+/// 1. The combination of an amount and a token (in the format `AMOUNTTOKEN`).
+/// 2. A recipient address.
+///
+/// The function uses regular expressions to ensure that both the token and address are valid.
+/// 
+/// ### Arguments
+/// * `args` - A reference to a `Vec<String>` containing the arguments to be validated. The expected format is:
+///   - `args[0]`: A string containing the amount and token (e.g., "100btc").
+///   - `args[1]`: A string representing the recipient address.
+///
+/// ### Returns
+/// Returns a tuple containing:
+/// * `amount` - A `u32` representing the parsed amount from the `AMOUNTTOKEN` argument.
+/// * `token` - A `String` containing the extracted token symbol from the `AMOUNTTOKEN`.
+/// * `address` - A `String` representing the validated recipient address.
+///
+/// ### Errors
+/// This function may return an error in the following cases:
+/// - If the `AMOUNTTOKEN` format is invalid (e.g., "100btc" is the expected format).
+/// - If the token contains invalid characters (only alphanumeric characters, `-`, and `_` are allowed).
+/// - If the address contains invalid characters (only alphanumeric characters, `-`, and `_` are allowed).
+/// - If the amount is not a valid positive integer.
+
 fn validate_args(args: &Vec<String>) -> Result<(u32, String, String)> {
     
     // Regular expression in order to extract amount and token () are use to define groups of capture
-    let amount_token_regex = Regex::new(r"^(\d+)([a-zA-Z]+[-]*[\d]*)$")?;
+    let amount_token_regex = Regex::new(r"^(\d+)([a-zA-Z]+[-]*[\d]*)$")
+                                    .context("Failed to create regular expression for [amount][token]")?;
 
     // Regular expression in order to valid token and addr, alpha numeric and '-' '_' also
-    let valid_str = Regex::new(r"^[a-zA-Z0-9\-_]+$")?;
+    let valid_str = Regex::new(r"^[a-zA-Z0-9\-_]+$")
+                           .context("Error constructing regular expression for validating token and address")?;
 
     // Try to capture amount and token using the regular expresion
-    let captures = amount_token_regex.captures(&args[0]).ok_or(anyhow!("INVALID AMOUNTTOKEN FORMAT. MUST BE AMOUNTTOKEN EX: 100btc"))?;
+    let captures = amount_token_regex.captures(&args[0])
+                                .context("Invalid AMOUNTTOKEN format. Expected format: 'AMOUNTTOKEN' (ex. '100btc')")?;
 
     // Get Amount
-    let amount: u32 = captures[1].parse().map_err(|_| anyhow!("INVALID AMOUNT. THE AMOUNT SPECIFIED ISN'T VALID => MUST BE 0 < AMOUNT"))?;
+    let amount: u32 = captures[1].parse().context("Invalid amount. The specified amount must be greater than 0")?;
     
     // Get Token 
     let token = captures[2].to_string();
 
     // Validate Token vs Regular Expr
     if !valid_str.is_match(&token){
-        return Err(anyhow!("INVALID TOKEN FORMAT. ONLY ALLOWED ALPHA NUMERIC VALUES AND/OR '-' '_' SPECIAL CHARACTERS"))
+        return Err(anyhow!("Invalid token format. Only alphanumeric values and/or '-' and '_' special characters are allowed"))
     }
    
     // Validate Addr vs Regular Expr
     if !valid_str.is_match(&args[1]){
-        return Err(anyhow!("INVALID ADDR FORMAT. ONLY ALLOWED ALPHA NUMERIC VALUES AND/OR '-' '_' SPECIAL CHARACTERS"))
+        return Err(anyhow!("Invalid address format. Only alphanumeric values and/or '-' and '_' special characters are allowed"))
     }
 
     Ok((amount, token, args[1].to_string()))
 }
 
-
+/// Executes a transaction on the Cosmos blockchain.
+///
+/// This function performs the following steps:
+/// 1. Connects to the Cosmos blockchain.
+/// 2. Retrieves the balance for the given Cosmos wallet address.
+/// 3. Loads the wallet from the file located at `wallet/wallet.key`.
+/// 4. Executes the specified transaction by sending the specified token amount to the destination address.
+///
+/// ### Arguments
+/// * `transaction` - A reference to a [`Transaction`] object containing the transaction details, 
+///   including the recipient address, token, and amount to be transferred.
+///
+/// ### Returns
+/// Returns a tuple containing:
+/// * `TxResponse::code` - A `u32` representing the transaction response code (0 for success, non-zero for failure).
+/// * `TxResponse::height` - An `i64` representing the block height at which the transaction was included.
+/// * `TxResponse::tx_hash` - A `String` representing the transaction hash, useful for tracking the transaction.
+///
+/// ### Errors
+/// This function may return an error in the following cases:
+/// - If it fails to connect to the Cosmos blockchain.
+/// - If the `wallet.key` file does not exist or cannot be read.
+/// - If the mnemonic phrase in the `wallet.key` file is invalid or cannot be loaded.
+/// - If the transaction fails during execution.
 async fn execute_transaction(transaction: &Transaction) -> Result<(u32, i64, String)> {
     
     // Connect to the blockchain
     info!("Connecting to Cosmos...");
-    let cosmos_addr = cosmos::CosmosNetwork::OsmosisTestnet.connect().await?;
-    info!("Connected");
+    let cosmos_addr = cosmos::CosmosNetwork::OsmosisTestnet.connect().await
+                              .context("Error connecting to Cosmos")?;
+    info!("Connection successful.");
     
     // Get the address
-    let address = cosmos::Address::from_str(&transaction.get_addr())?;
+    let address = cosmos::Address::from_str(&transaction.get_addr())
+                           .context(format!("Failed to convert {} to Address", &transaction.get_addr()))?;
     
     // Get balance
     info!("Getting balance for wallet {}", address);
 
-    let balances = cosmos::Cosmos::all_balances(&cosmos_addr, address).await?;
+    let balances = cosmos::Cosmos::all_balances(&cosmos_addr, address).await
+                              .context("Failed to retrieve all balances for the Cosmos address")?;
 
     // Iterate over all balances for each 
     balances.iter().for_each(|balance| {
@@ -256,23 +327,24 @@ async fn execute_transaction(transaction: &Transaction) -> Result<(u32, i64, Str
     // Load the wallet
     // Check if wallet exists.
     if metadata("wallet/wallet.key").is_err() {
-        info!("PATH WALLET/WALLET.KEY DOESN'T EXIST");
-        info!("Please follow these steps");
-        info!("1.- Create wallet dir");
-        info!("2.- Inside place 'wallet.key' file which contains your wallet mnemonic phrase");
-        info!("3.- Please be sure to read all the required steps at the top of this file");
+        info!("The path 'wallet/wallet.key' does not exist");
+        info!("Please follow the steps outlined in the readme.md file");
         return Err(anyhow!("Can not find the 'wallet.key' file in the path: 'wallet/wallet.key'"));
     }
 
     // Get the wallet
     // Read the wallet key
-    let wallet_key = read_to_string("wallet/wallet.key")?;
+    let wallet_key = read_to_string("wallet/wallet.key")
+                             .context("Error reading the wallet.key file")?;
     
     // Get Mnemonic
-    let mnemonic = cosmos::SeedPhrase::from_str(&wallet_key)?;
+    let mnemonic = cosmos::SeedPhrase::from_str(&wallet_key)
+                               .context("Failed to retrieve the mnemonic phrase")?;
     
     // Get wallet from Mnemonic
-    let wallet = mnemonic.with_hrp(cosmos::AddressHrp::from_string("osmo".to_owned())?)?;
+    let wallet = mnemonic.with_hrp(cosmos::AddressHrp::from_string("osmo".to_owned())
+                                 .context("Error obtaining AddressHrp")?)
+                                 .context("Error identifying the wallet")?;
     
     // Show and record wallet which should match with your 
     // Wallet addr in https://testnet-trade.levana.finance/ 
@@ -282,12 +354,17 @@ async fn execute_transaction(transaction: &Transaction) -> Result<(u32, i64, Str
     info!("Destination Wallet address: {}", address);
     
     // Execute transaction
-    let result = wallet.send_coins(&cosmos_addr, address, amount).await?; 
+    let result = wallet.send_coins(&cosmos_addr, address, amount).await
+                            .context(format!("Error executing the transaction at address {}", address))?;
 
     // All good
     Ok((result.code, result.height, result.txhash))
 }
 
+
+//
+// UNIT TEST
+//
 #[cfg(test)]
 mod unit_test {
     use super::*;
@@ -297,7 +374,7 @@ mod unit_test {
         let input = vec!["1000BTC".to_owned(), "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_owned()];
         let result = validate_args(&input);
         // Check is result is OK
-        assert!(result.is_ok(), "\nOk EXPECTED BUT GOT Err\n");
+        assert!(result.is_ok(), "\nOk expected but got Err\n");
         // unwrap Result and compare
         assert_eq!(result.unwrap(), (
             1000 as u32,
@@ -311,7 +388,7 @@ mod unit_test {
         let input = vec!["1000ERC-20".to_owned(),"ethA1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_owned()];
         let result = validate_args(&input);
         // Check is result is OK
-        assert!(result.is_ok(), "\nOk EXPECTED BUT GOT Err\n");
+        assert!(result.is_ok(), "\nOk expected but got Err\n");
         // unwrap Result and compare
         assert_eq!(result.unwrap(), (
             1000 as u32,
@@ -325,9 +402,9 @@ mod unit_test {
         let input = vec!["1000234".to_owned(), "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_owned()];
         let result = validate_args(&input);
         // Check is result is err
-        assert!(result.is_err(), "\nErr EXPECTED BUT GOT Ok\n");
+        assert!(result.is_err(), "\nErr expected but got Ok\n");
         // unwrap Result and compare
-        assert_eq!(result.unwrap_err().to_string(), "INVALID AMOUNTTOKEN FORMAT. MUST BE AMOUNTTOKEN EX: 100btc");
+        assert_eq!(result.unwrap_err().to_string(), "Invalid AMOUNTTOKEN format. Expected format: 'AMOUNTTOKEN' (ex. '100btc')");
     }
 
     #[test]
@@ -335,9 +412,9 @@ mod unit_test {
         let input = vec!["btceth".to_owned(), "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa".to_owned()];
         let result = validate_args(&input);
         // Check is result is err
-        assert!(result.is_err(), "\nErr EXPECTED BUT GOT Ok\n");
+        assert!(result.is_err(), "\nErr expected but got Ok\n");
         // unwrap Result and compare
-        assert_eq!(result.unwrap_err().to_string(), "INVALID AMOUNTTOKEN FORMAT. MUST BE AMOUNTTOKEN EX: 100btc");
+        assert_eq!(result.unwrap_err().to_string(), "Invalid AMOUNTTOKEN format. Expected format: 'AMOUNTTOKEN' (ex. '100btc')");
     }
     
     #[test]
@@ -347,7 +424,7 @@ mod unit_test {
         // Check is result is err
         assert!(result.is_err(), "\nErr expected but got Ok\n");
         // unwrap Result and compare
-        assert_eq!(result.unwrap_err().to_string(), "INVALID AMOUNTTOKEN FORMAT. MUST BE AMOUNTTOKEN EX: 100btc");
+        assert_eq!(result.unwrap_err().to_string(), "Invalid AMOUNTTOKEN format. Expected format: 'AMOUNTTOKEN' (ex. '100btc')");
     }
 
     #[test]
@@ -357,7 +434,7 @@ mod unit_test {
         // Check is result is err
         assert!(result.is_err(), "\nErr expected but got Ok\n");
         // unwrap Result and compare
-        assert_eq!(result.unwrap_err().to_string(), "INVALID ADDR FORMAT. ONLY ALLOWED ALPHA NUMERIC VALUES AND/OR '-' '_' SPECIAL CHARACTERS");
+        assert_eq!(result.unwrap_err().to_string(), "Invalid address format. Only alphanumeric values and/or '-' and '_' special characters are allowed");
     }
 
 }
