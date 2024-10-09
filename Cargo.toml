@@ -17,9 +17,6 @@ log = "0.4"
 fern = "0.6"
 chrono = "0.4"
 
-# regular expresion
-regex = "1.11.0"
-
 # tokio for async
 tokio = { version = "1", features = ["full"] }
 
