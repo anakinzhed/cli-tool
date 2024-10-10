@@ -1,9 +1,0 @@
-[2024-10-10 07:12:27][INFO] cli_tool: Rust Cli Tool has started
-[2024-10-10 07:12:27][INFO] cli_tool: Connecting to Cosmos...
-[2024-10-10 07:12:27][INFO] cli_tool: Connection successful.
-[2024-10-10 07:12:27][INFO] cli_tool: Getting balance for wallet osmo168gdk6r58jdwfv49kuesq2rs747jawnn4ryvyk
-[2024-10-10 07:12:28][INFO] cli_tool: Balance: 81831800
-[2024-10-10 07:12:28][INFO] cli_tool: Executing transaction....
-[2024-10-10 07:12:28][INFO] cli_tool: Sender Wallet address: osmo18c8rrfn3wny89kpz9qxmrvlucjpehtvpq3r0q8
-[2024-10-10 07:12:28][INFO] cli_tool: Destination Wallet address: osmo168gdk6r58jdwfv49kuesq2rs747jawnn4ryvyk
-[2024-10-10 07:12:31][INFO] cli_tool: Transaction completed successfully: {"code":0,"height":11859202,"tx_hash":"078F22F31D5C2571420D6667AD5F3C90C5A3BB20B22C5C6BF187126FDD1BDBBB"}
