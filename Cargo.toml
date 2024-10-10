@@ -9,13 +9,16 @@ edition = "2021"
 cosmos = { git = "https://github.com/anakinzhed/cosmos-rs" }
 
 # command params
-clap = { version = "4.5.19", features = ["derive"] }
+clap = { version = "4.5.20", features = ["derive"] }
 
 # handle logs and errors
 anyhow = "1.0.89"
 log = "0.4"
 fern = "0.6"
 chrono = "0.4"
+
+# file error
+fs-err = "2.9"
 
 # tokio for async
 tokio = { version = "1", features = ["full"] }
