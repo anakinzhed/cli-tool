@@ -1,4 +1,4 @@
-use std::{io::{self, Write}, str::FromStr};
+use std::str::FromStr;
 
 // File I/O for better error handling
 use fs_err;
@@ -11,6 +11,14 @@ use serde_json::json;
 
 // Parse input
 use clap::Parser;
+
+#[derive(Parser, Debug)]
+struct Opt {
+    /// Path to the Cosmos configuration file
+    #[clap(env = "wallet_mnemonic", global = true)] // Captura desde la variable de entorno
+    mnemonic: String,
+}
+
 #[derive(Parser, Debug)]
 struct Transaction {
     /// Amount to send to another wallet, e.g. 110uosmo
@@ -21,8 +29,7 @@ struct Transaction {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
-    println!("Rust Cli Tool has started");
+    tracing::info!("Rust Cli Tool has started");
 
     // If some wrong format is detected will panic
     let transaction = Transaction::parse();
@@ -34,15 +41,14 @@ async fn main() -> Result<()> {
 
     // All good
     if transaction_details["code"] == 0 {
-        println!(
+        tracing::info!(
             "Transaction completed successfully: {}",
             transaction_details
         );
         Ok(())
     } else {
         // Error
-        let error_message = format!("Transaction finalized with errors: {}", transaction_details);
-        writeln!(io::stderr(), "{}", error_message).unwrap();
+        tracing::error!("Transaction finalized with errors: {}", transaction_details);
         Err(anyhow!(
             "Transaction finalized with errors {}",
             transaction_details
@@ -77,18 +83,18 @@ async fn main() -> Result<()> {
 ///
 async fn execute_transaction(transaction: &Transaction) -> Result<serde_json::Value> {
     // Connect to the blockchain
-    println!("Connecting to Cosmos...");
+    tracing::info!("Connecting to Cosmos...");
     let cosmos_addr = cosmos::CosmosNetwork::OsmosisTestnet
         .connect()
         .await
         .context("Error connecting to Cosmos")?;
-    println!("Connection successful.");
+    tracing::info!("Connection successful.");
 
     // Get the address
     let address = transaction.destination;
 
     // Get balance
-    println!("Getting balance for wallet {}", address);
+    tracing::info!("Getting balance for wallet {}", address);
 
     let balances = cosmos::Cosmos::all_balances(&cosmos_addr, address)
         .await
@@ -97,13 +103,13 @@ async fn execute_transaction(transaction: &Transaction) -> Result<serde_json::Va
     // Iterate over all balances for each
     balances.iter().for_each(|balance| {
         // Check if this denom is the one by task
-        if balance.denom.contains(&address.to_string()){
+        if balance.denom.contains(&address.to_string()) {
             // Show and record info
-            println!("Balance: {}", balance.amount);
+            tracing::info!("Balance: {}", balance.amount);
         }
     });
 
-    println!("Executing transaction....");
+    tracing::info!("Executing transaction....");
 
     // Vec which contains the Coin to send => 100 uosmo
     // Convert from ParseCoin to cosmos::Coin, ParseCoin fields are private
@@ -111,21 +117,16 @@ async fn execute_transaction(transaction: &Transaction) -> Result<serde_json::Va
     let amount: Vec<cosmos::Coin> = vec![coin];
 
     // Load the wallet
-    // Check if wallet exists.
-    if fs_err::metadata("wallet/wallet.key").is_err() {
-        println!("The path 'wallet/wallet.key' does not exist");
-        println!("Please follow the steps outlined in the readme.md file");
-        return Err(anyhow!(
-            "Can not find the 'wallet.key' file in the path: 'wallet/wallet.key'"
-        ));
-    }
+    // Check if wallet exists in environment variable
+    // check if work without parse
+    let wallet = Opt::parse();
 
     // Get the wallet
     // Read the wallet key
-    let wallet_key =
-        fs_err::read_to_string("wallet/wallet.key").context("Error reading the wallet.key file")?;
+    let wallet_key = fs_err::read_to_string(wallet.mnemonic)
+        .context("Error reading the wallet.key file")?;
 
-    // Get Mnemonic
+    // Get Mnemonicclear
     let mnemonic = cosmos::SeedPhrase::from_str(&wallet_key)
         .context("Failed to retrieve the mnemonic phrase")?;
 
@@ -136,10 +137,10 @@ async fn execute_transaction(transaction: &Transaction) -> Result<serde_json::Va
 
     // Show and record wallet which should match with your
     // Wallet addr in https://testnet-trade.levana.finance/
-    println!("Sender Wallet address: {}", wallet);
+    tracing::info!("Sender Wallet address: {}", wallet);
 
     // Destination Wallet
-    println!("Destination Wallet address: {}", address);
+    tracing::info!("Destination Wallet address: {}", address);
 
     // Execute transaction
     let result = wallet
