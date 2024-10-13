@@ -7,10 +7,10 @@
 1. Go to [Levana Testnet](https://testnet-trade.levana.finance/).
 2. Connect a wallet:
    - I recommend **Keplr**. Set up the wallet.
-   - Now you need to create an environment variable named `mnemonic`.    
+   - Now you need to create an environment variable named `COSMOS_WALLET`.    
      This variable should contain the secret key for your wallet.
      ```bash
-     export mnemonic="place your secret wallet key or wont be valid for the program"
+     export COSMOS_WALLET="place your secret wallet key or wont be valid for the program"
      ```
    - Click on the wallet address and you will see the Faucet.
      > **Note**: A faucet in the blockchain is a tool or service that distributes small amounts of cryptocurrency for free to users (training purposes).

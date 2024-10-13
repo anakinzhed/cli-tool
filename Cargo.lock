@@ -604,8 +604,6 @@ dependencies = [
  "anyhow",
  "clap",
  "cosmos",
- "serde",
- "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
